@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Nginx Load Balancer — Live Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@300;400;600&family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#070a0c;
+  --surface:#0e1316;
+  --card:#131a1f;
+  --border:#1a2530;
+  --green:#00e5a0;
+  --green-dim:#00a370;
+  --cyan:#00cfff;
+  --red:#e50914;
+  --blue:#0088ff;
+  --yellow:#f5c842;
+  --text:#c8d8e4;
+  --muted:#4a6070;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;min-height:100vh;overflow-x:hidden}
+
+/* ===== HERO ===== */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 24px;text-align:center;position:relative;overflow:hidden}
+
+/* animated grid bg */
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background-image:linear-gradient(rgba(0,229,160,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,0.04) 1px,transparent 1px);
+  background-size:50px 50px;
+  animation:gridMove 20s linear infinite;
+}
+@keyframes gridMove{from{transform:translateY(0)}to{transform:translateY(50px)}}
+
+/* radial glow */
+.hero::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(0,229,160,0.06) 0%,transparent 70%);pointer-events:none}
+
+.hero-content{position:relative;z-index:1;max-width:800px}
+
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.25);
+  border-radius:30px;padding:7px 18px;
+  font-family:'JetBrains Mono';font-size:11px;letter-spacing:0.15em;color:var(--green);
+  margin-bottom:32px;
+  animation:fadeDown 0.8s ease both;
+}
+.pulse-dot{width:7px;height:7px;background:var(--green);border-radius:50%;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,229,160,0.5)}50%{opacity:0.8;box-shadow:0 0 0 6px rgba(0,229,160,0)}}
+
+h1{
+  font-family:'Bebas Neue';
+  font-size:clamp(52px,10vw,110px);
+  line-height:0.95;
+  color:#fff;
+  letter-spacing:0.02em;
+  margin-bottom:20px;
+  animation:fadeUp 0.8s ease 0.1s both;
+}
+h1 span{color:var(--green)}
+
+.hero-sub{
+  font-size:clamp(14px,2vw,17px);font-weight:300;
+  color:rgba(255,255,255,0.55);
+  line-height:1.7;max-width:540px;margin:0 auto 48px;
+  animation:fadeUp 0.8s ease 0.2s both;
+}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeDown{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:translateY(0)}}
+
+/* ===== LIVE ANIMATION ===== */
+.lb-animation{
+  position:relative;width:100%;max-width:700px;margin:0 auto 48px;
+  animation:fadeUp 0.8s ease 0.3s both;
+}
+
+.anim-container{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;padding:40px 32px;
+  position:relative;overflow:hidden;
+}
+.anim-container::before{
+  content:'// LIVE TRAFFIC SIMULATION';
+  position:absolute;top:16px;left:24px;
+  font-family:'JetBrains Mono';font-size:10px;
+  color:var(--muted);letter-spacing:0.15em;
+}
+
+/* nodes */
+.nodes-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:8px}
+
+.node-box{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:16px 12px;text-align:center;
+  flex:1;position:relative;transition:all 0.3s;
+}
+.node-box.client{border-color:var(--cyan);max-width:120px}
+.node-box.lb{border-color:var(--green);background:rgba(0,229,160,0.04);max-width:150px}
+.node-box.active{box-shadow:0 0 20px rgba(0,229,160,0.2);border-color:var(--green);transform:scale(1.04)}
+.node-box.s1.active{box-shadow:0 0 20px rgba(229,9,20,0.25);border-color:var(--red)}
+.node-box.s2.active{box-shadow:0 0 20px rgba(0,136,255,0.25);border-color:var(--blue)}
+.node-box.s3.active{box-shadow:0 0 20px rgba(0,204,68,0.25);border-color:#00cc44}
+
+.node-icon{font-size:22px;margin-bottom:6px}
+.node-label{font-family:'JetBrains Mono';font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:3px}
+.node-name{font-weight:600;font-size:13px;color:#fff}
+.node-port{font-family:'JetBrains Mono';font-size:10px;margin-top:3px}
+.node-box.lb .node-name{color:var(--green)}
+.node-box.client .node-name{color:var(--cyan)}
+.s1 .node-port{color:var(--red)}
+.s2 .node-port{color:var(--blue)}
+.s3 .node-port{color:#00cc44}
+
+/* arrows / pipes */
+.pipe{flex:1;display:flex;align-items:center;justify-content:center;position:relative;height:40px;max-width:80px}
+.pipe-line{width:100%;height:2px;background:var(--border);border-radius:1px;position:relative;overflow:hidden}
+.pipe-line::after{
+  content:'';position:absolute;top:0;left:-100%;
+  width:100%;height:100%;
+  background:linear-gradient(90deg,transparent,var(--green),transparent);
+  animation:flowRight 1.5s linear infinite;
+  opacity:0;
+}
+.pipe-line.active::after{opacity:1}
+.pipe-arrow{color:var(--muted);font-size:14px;margin-left:4px}
+
+.pipe-split{display:flex;flex-direction:column;gap:6px;max-width:80px;flex:1}
+.pipe-branch{display:flex;align-items:center;gap:4px}
+.pipe-branch-line{flex:1;height:2px;background:var(--border);border-radius:1px;position:relative;overflow:hidden}
+.pipe-branch-line::after{
+  content:'';position:absolute;top:0;left:-100%;
+  width:100%;height:100%;
+  background:linear-gradient(90deg,transparent,var(--green),transparent);
+  animation:flowRight 1.5s linear infinite;
+  opacity:0;
+}
+.pipe-branch-line.s1::after{background:linear-gradient(90deg,transparent,var(--red),transparent)}
+.pipe-branch-line.s2::after{background:linear-gradient(90deg,transparent,var(--blue),transparent)}
+.pipe-branch-line.s3::after{background:linear-gradient(90deg,transparent,#00cc44,transparent)}
+.pipe-branch-line.active::after{opacity:1}
+
+@keyframes flowRight{from{left:-100%}to{left:100%}}
+
+/* request counter badge */
+.req-badge{
+  position:absolute;top:-10px;right:-10px;
+  background:var(--green);color:#000;
+  font-family:'JetBrains Mono';font-size:10px;font-weight:600;
+  padding:3px 7px;border-radius:10px;
+  min-width:28px;text-align:center;
+  transform:scale(0);transition:transform 0.2s;
+}
+.req-badge.show{transform:scale(1)}
+
+/* stats row */
+.stats-row{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:12px;
+  margin-top:28px;
+}
+.stat{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:8px;padding:14px 12px;text-align:center;
+}
+.stat-val{font-family:'JetBrains Mono';font-size:22px;font-weight:600;color:var(--green);margin-bottom:4px}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em}
+
+/* log feed */
+.log-feed{
+  margin-top:20px;
+  background:#050709;border:1px solid var(--border);
+  border-radius:8px;padding:14px 16px;
+  font-family:'JetBrains Mono';font-size:11px;
+  height:100px;overflow:hidden;position:relative;
+}
+.log-feed::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:30px;
+  background:linear-gradient(to bottom,#050709,transparent);
+  z-index:1;pointer-events:none;
+}
+.log-line{color:var(--muted);line-height:1.9;animation:logIn 0.3s ease}
+.log-line .ts{color:#2a4050}
+.log-line .s1c{color:var(--red)}
+.log-line .s2c{color:var(--blue)}
+.log-line .s3c{color:#00cc44}
+.log-line .ok{color:var(--green)}
+@keyframes logIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ===== SERVER CARDS ===== */
+.section{padding:80px 24px;max-width:1000px;margin:0 auto}
+.section-label{
+  font-family:'JetBrains Mono';font-size:11px;
+  color:var(--green);letter-spacing:0.2em;text-transform:uppercase;
+  margin-bottom:12px;
+}
+.section-title{
+  font-family:'Bebas Neue';font-size:clamp(36px,5vw,56px);
+  color:#fff;letter-spacing:0.03em;margin-bottom:40px;
+}
+
+.server-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+
+.server-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;
+  transition:transform 0.3s,box-shadow 0.3s;
+  text-decoration:none;color:inherit;display:block;
+}
+.server-card:hover{transform:translateY(-6px)}
+.server-card.s1:hover{box-shadow:0 16px 40px rgba(229,9,20,0.15);border-color:rgba(229,9,20,0.3)}
+.server-card.s2:hover{box-shadow:0 16px 40px rgba(0,136,255,0.15);border-color:rgba(0,136,255,0.3)}
+.server-card.s3:hover{box-shadow:0 16px 40px rgba(0,204,68,0.15);border-color:rgba(0,204,68,0.3)}
+
+.card-hero{height:120px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.s1 .card-hero{background:linear-gradient(135deg,#150000,#3a0000)}
+.s2 .card-hero{background:linear-gradient(135deg,#000d1a,#003a6e)}
+.s3 .card-hero{background:linear-gradient(135deg,#001500,#003a00)}
+.card-hero-title{font-family:'Bebas Neue';font-size:42px;letter-spacing:0.05em;position:relative;z-index:1}
+.s1 .card-hero-title{color:#e50914;text-shadow:0 0 30px rgba(229,9,20,0.5)}
+.s2 .card-hero-title{color:#0088ff;text-shadow:0 0 30px rgba(0,136,255,0.5)}
+.s3 .card-hero-title{color:#00cc44;text-shadow:0 0 30px rgba(0,204,68,0.5)}
+
+.card-body{padding:20px}
+.card-server-tag{
+  font-family:'JetBrains Mono';font-size:10px;
+  letter-spacing:0.15em;text-transform:uppercase;
+  margin-bottom:6px;
+}
+.s1 .card-server-tag{color:var(--red)}
+.s2 .card-server-tag{color:var(--blue)}
+.s3 .card-server-tag{color:#00cc44}
+.card-title{font-size:16px;font-weight:600;color:#fff;margin-bottom:6px}
+.card-desc{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px}
+.card-meta{display:flex;gap:8px;flex-wrap:wrap}
+.meta-chip{
+  background:rgba(255,255,255,0.05);border:1px solid var(--border);
+  border-radius:4px;padding:3px 9px;
+  font-family:'JetBrains Mono';font-size:10px;color:var(--muted);
+}
+.card-btn{
+  display:block;width:100%;
+  padding:11px;margin-top:16px;
+  border:1px solid var(--border);border-radius:6px;
+  font-size:13px;font-weight:600;letter-spacing:0.05em;
+  text-align:center;cursor:pointer;transition:all 0.2s;
+  font-family:'Barlow';
+}
+.s1 .card-btn{background:rgba(229,9,20,0.1);color:var(--red);border-color:rgba(229,9,20,0.25)}
+.s1 .card-btn:hover{background:rgba(229,9,20,0.2)}
+.s2 .card-btn{background:rgba(0,136,255,0.1);color:var(--blue);border-color:rgba(0,136,255,0.25)}
+.s2 .card-btn:hover{background:rgba(0,136,255,0.2)}
+.s3 .card-btn{background:rgba(0,204,68,0.1);color:#00cc44;border-color:rgba(0,204,68,0.25)}
+.s3 .card-btn:hover{background:rgba(0,204,68,0.2)}
+
+/* ===== HOW IT WORKS ===== */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:8px}
+.step{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px 20px;position:relative}
+.step-num{font-family:'Bebas Neue';font-size:52px;color:rgba(0,229,160,0.15);line-height:1;margin-bottom:10px}
+.step-title{font-weight:600;font-size:15px;color:#fff;margin-bottom:6px}
+.step-desc{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* ===== ALGO SECTION ===== */
+.algo-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.algo-tab{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:20px;padding:7px 18px;
+  font-size:13px;font-family:'JetBrains Mono';
+  color:var(--muted);cursor:pointer;transition:all 0.2s;
+}
+.algo-tab.active,.algo-tab:hover{
+  border-color:var(--green-dim);color:var(--green);
+  background:rgba(0,229,160,0.07);
+}
+.algo-content{
+  background:#050709;border:1px solid var(--border);
+  border-left:3px solid var(--green);border-radius:0 8px 8px 0;
+  padding:20px 24px;
+  font-family:'JetBrains Mono';font-size:13px;
+  color:#c8d8e4;line-height:1.9;
+}
+.algo-content .kw{color:var(--cyan)}
+.algo-content .val{color:var(--yellow)}
+.algo-content .cm{color:var(--muted)}
+
+/* ===== FOOTER ===== */
+footer{
+  border-top:1px solid var(--border);
+  padding:32px 24px;text-align:center;
+  font-size:13px;color:var(--muted);
+}
+footer a{color:var(--green);text-decoration:none}
+footer a:hover{text-decoration:underline}
+
+/* ===== SCROLL REVEAL ===== */
+.reveal{opacity:0;transform:translateY(30px);transition:opacity 0.6s ease,transform 0.6s ease}
+.reveal.visible{opacity:1;transform:translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">
+      <div class="pulse-dot"></div>
+      LIVE DEMO · NGINX LOAD BALANCER PROJECT
+    </div>
+
+    <h1>NGINX <span>LOAD</span><br>BALANCER</h1>
+
+    <p class="hero-sub">
+      A production-grade load balancer built on RHEL Linux — watch live traffic being distributed across 3 backend servers in real time using the Round Robin algorithm.
+    </p>
+
+    <!-- LIVE ANIMATION -->
+    <div class="lb-animation">
+      <div class="anim-container">
+        <div class="nodes-row">
+
+          <!-- Client -->
+          <div class="node-box client" id="clientNode">
+            <div class="node-icon">💻</div>
+            <div class="node-label">Client</div>
+            <div class="node-name">Browser</div>
+            <div class="node-port" style="color:var(--cyan)">HTTP</div>
+          </div>
+
+          <!-- Pipe: client → LB -->
+          <div class="pipe">
+            <div class="pipe-line" id="pipe0"></div>
+            <div class="pipe-arrow">▶</div>
+          </div>
+
+          <!-- Load Balancer -->
+          <div class="node-box lb" id="lbNode">
+            <div class="node-icon">⚖️</div>
+            <div class="node-label">Load Balancer</div>
+            <div class="node-name">Nginx</div>
+            <div class="node-port" style="color:var(--green)">:80</div>
+            <div class="req-badge" id="reqBadge">0</div>
+          </div>
+
+          <!-- Split pipes: LB → Servers -->
+          <div class="pipe-split">
+            <div class="pipe-branch">
+              <div class="pipe-branch-line s1" id="pipe1"></div>
+              <span style="color:var(--red);font-size:11px">▶</span>
+            </div>
+            <div class="pipe-branch">
+              <div class="pipe-branch-line s2" id="pipe2"></div>
+              <span style="color:var(--blue);font-size:11px">▶</span>
+            </div>
+            <div class="pipe-branch">
+              <div class="pipe-branch-line s3" id="pipe3"></div>
+              <span style="color:#00cc44;font-size:11px">▶</span>
+            </div>
+          </div>
+
+          <!-- Servers -->
+          <div style="display:flex;flex-direction:column;gap:8px;flex:1">
+            <div class="node-box s1" id="s1Node">
+              <div class="node-label">Server 1</div>
+              <div class="node-name" style="color:var(--red)">Dark Origin</div>
+              <div class="node-port">:8081</div>
+            </div>
+            <div class="node-box s2" id="s2Node">
+              <div class="node-label">Server 2</div>
+              <div class="node-name" style="color:var(--blue)">Ocean Deep</div>
+              <div class="node-port">:8082</div>
+            </div>
+            <div class="node-box s3" id="s3Node">
+              <div class="node-label">Server 3</div>
+              <div class="node-name" style="color:#00cc44">Wild Earth</div>
+              <div class="node-port">:8083</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row">
+          <div class="stat">
+            <div class="stat-val" id="totalReq">0</div>
+            <div class="stat-label">Total Requests</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val" style="color:var(--red)" id="s1Count">0</div>
+            <div class="stat-label">Server 1 Hits</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val" style="color:var(--blue)" id="s2Count">0</div>
+            <div class="stat-label">Server 2 Hits</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val" style="color:#00cc44" id="s3Count">0</div>
+            <div class="stat-label">Server 3 Hits</div>
+          </div>
+        </div>
+
+        <!-- Log feed -->
+        <div class="log-feed" id="logFeed">
+          <div class="log-line"><span class="ts">[INIT]</span> Nginx upstream registered — 3 servers online</div>
+          <div class="log-line"><span class="ts">[OK]</span> Health check passed on all backends</div>
+          <div class="log-line"><span class="ts">[READY]</span> Load balancer active on port 80...</div>
+        </div>
+
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;animation:fadeUp 0.8s ease 0.5s both">
+      <a href="#servers" style="background:var(--green);color:#000;font-weight:700;padding:13px 28px;border-radius:6px;text-decoration:none;font-size:15px">
+        View Servers ↓
+      </a>
+      <a href="#how" style="background:var(--card);border:1px solid var(--border);color:#fff;font-weight:600;padding:13px 28px;border-radius:6px;text-decoration:none;font-size:15px">
+        How It Works
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SERVER CARDS ===== -->
+<section class="section reveal" id="servers">
+  <div class="section-label">// backend servers</div>
+  <div class="section-title">3 Live Backend Servers</div>
+  <div class="server-cards">
+    <a href="server1/index.html" class="server-card s1">
+      <div class="card-hero"><div class="card-hero-title">DARK ORIGIN</div></div>
+      <div class="card-body">
+        <div class="card-server-tag">● Server 1 · Port 8081</div>
+        <div class="card-title">Dark Origin</div>
+        <div class="card-desc">A brilliant engineer must shut down a rogue AI before it rewrites reality. Red-themed StreamFlix page.</div>
+        <div class="card-meta">
+          <span class="meta-chip">Thriller</span>
+          <span class="meta-chip">Sci-Fi</span>
+          <span class="meta-chip">Action</span>
+        </div>
+        <div class="card-btn">Open Server 1 →</div>
+      </div>
+    </a>
+    <a href="server2/index.html" class="server-card s2">
+      <div class="card-hero"><div class="card-hero-title">OCEAN DEEP</div></div>
+      <div class="card-body">
+        <div class="card-server-tag">● Server 2 · Port 8082</div>
+        <div class="card-title">Ocean Deep</div>
+        <div class="card-desc">A marine biologist uncovers an ancient civilisation beneath the Pacific Ocean. Blue-themed StreamFlix page.</div>
+        <div class="card-meta">
+          <span class="meta-chip">Adventure</span>
+          <span class="meta-chip">Mystery</span>
+          <span class="meta-chip">Drama</span>
+        </div>
+        <div class="card-btn">Open Server 2 →</div>
+      </div>
+    </a>
+    <a href="server3/index.html" class="server-card s3">
+      <div class="card-hero"><div class="card-hero-title">WILD EARTH</div></div>
+      <div class="card-body">
+        <div class="card-server-tag">● Server 3 · Port 8083</div>
+        <div class="card-title">Wild Earth</div>
+        <div class="card-desc">An extraordinary journey through the world's last untouched wilderness. Green-themed StreamFlix page.</div>
+        <div class="card-meta">
+          <span class="meta-chip">Documentary</span>
+          <span class="meta-chip">Nature</span>
+          <span class="meta-chip">Wildlife</span>
+        </div>
+        <div class="card-btn">Open Server 3 →</div>
+      </div>
+    </a>
+  </div>
+</section>
+
+<!-- ===== HOW IT WORKS ===== -->
+<section class="section reveal" id="how">
+  <div class="section-label">// round robin algorithm</div>
+  <div class="section-title">How It Works</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <div class="step-title">Client Sends Request</div>
+      <div class="step-desc">Browser sends an HTTP request to Nginx on port 80.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <div class="step-title">Nginx Decides</div>
+      <div class="step-desc">Nginx checks which backend server is next in the Round Robin sequence.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <div class="step-title">Request Forwarded</div>
+      <div class="step-desc">Nginx forwards the request to the selected backend server via proxy_pass.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">04</div>
+      <div class="step-title">Response Returned</div>
+      <div class="step-desc">The backend server responds and Nginx sends it back to the client.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">05</div>
+      <div class="step-title">Next Request Rotates</div>
+      <div class="step-desc">Next request goes to the next server. S1 → S2 → S3 → S1 → repeat.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">06</div>
+      <div class="step-title">Auto Failover</div>
+      <div class="step-desc">If a server dies, Nginx automatically skips it and uses the others.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ALGORITHMS ===== -->
+<section class="section reveal">
+  <div class="section-label">// nginx config</div>
+  <div class="section-title">Load Balancing Algorithms</div>
+  <div class="algo-tabs">
+    <div class="algo-tab active" onclick="showAlgo('rr',this)">Round Robin</div>
+    <div class="algo-tab" onclick="showAlgo('lc',this)">Least Connections</div>
+    <div class="algo-tab" onclick="showAlgo('ih',this)">IP Hash</div>
+    <div class="algo-tab" onclick="showAlgo('wt',this)">Weighted</div>
+  </div>
+  <div class="algo-content" id="algoContent">
+<span class="cm"># Round Robin (DEFAULT) — requests go S1→S2→S3→S1 in order</span>
+<span class="kw">upstream</span> <span class="val">backend_servers</span> {
+    <span class="kw">server</span> <span class="val">127.0.0.1:8081</span>;   <span class="cm"># Server 1</span>
+    <span class="kw">server</span> <span class="val">127.0.0.1:8082</span>;   <span class="cm"># Server 2</span>
+    <span class="kw">server</span> <span class="val">127.0.0.1:8083</span>;   <span class="cm"># Server 3</span>
+}</div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<footer>
+  <p>Built by <strong style="color:#fff">Sree</strong> · RHEL Linux · Nginx · March 2026</p>
+  <p style="margin-top:8px">
+    <a href="https://github.com">GitHub Repo</a> &nbsp;·&nbsp;
+    <a href="#servers">View Servers</a> &nbsp;·&nbsp;
+    <a href="#how">How It Works</a>
+  </p>
+</footer>
+
+<script>
+// ===== LOAD BALANCER ANIMATION =====
+let total=0, counts=[0,0,0], current=0;
+const servers=['s1','s2','s3'];
+const pipes=['pipe1','pipe2','pipe3'];
+const nodes=['s1Node','s2Node','s3Node'];
+const logs=[
+  ['s1c','GET / HTTP/1.1 → <span class="ok">200 OK</span> → <span class="s1c">SERVER 1</span> (8081)'],
+  ['s2c','GET / HTTP/1.1 → <span class="ok">200 OK</span> → <span class="s2c">SERVER 2</span> (8082)'],
+  ['s3c','GET / HTTP/1.1 → <span class="ok">200 OK</span> → <span class="s3c">SERVER 3</span> (8083)'],
+];
+
+function animateRequest(){
+  // reset all
+  document.getElementById('pipe0').classList.remove('active');
+  pipes.forEach(p=>document.getElementById(p).classList.remove('active'));
+  nodes.forEach(n=>document.getElementById(n).classList.remove('active'));
+  document.getElementById('lbNode').classList.remove('active');
+
+  // step 1: client → LB
+  setTimeout(()=>{
+    document.getElementById('clientNode').style.boxShadow='0 0 16px rgba(0,207,255,0.3)';
+    document.getElementById('pipe0').classList.add('active');
+  },100);
+
+  // step 2: LB active
+  setTimeout(()=>{
+    document.getElementById('clientNode').style.boxShadow='';
+    document.getElementById('lbNode').classList.add('active');
+    // show request count
+    const badge=document.getElementById('reqBadge');
+    total++;
+    badge.textContent=total;
+    badge.classList.add('show');
+  },600);
+
+  // step 3: LB → server
+  setTimeout(()=>{
+    document.getElementById('lbNode').classList.remove('active');
+    document.getElementById(pipes[current]).classList.add('active');
+    document.getElementById(nodes[current]).classList.add('active');
+
+    // update counters
+    counts[current]++;
+    document.getElementById('totalReq').textContent=total;
+    document.getElementById('s1Count').textContent=counts[0];
+    document.getElementById('s2Count').textContent=counts[1];
+    document.getElementById('s3Count').textContent=counts[2];
+
+    // add log line
+    addLog(current);
+
+    // rotate to next server
+    current=(current+1)%3;
+  },1200);
+
+  // step 4: reset
+  setTimeout(()=>{
+    pipes.forEach(p=>document.getElementById(p).classList.remove('active'));
+    nodes.forEach(n=>document.getElementById(n).classList.remove('active'));
+  },2200);
+}
+
+function addLog(idx){
+  const feed=document.getElementById('logFeed');
+  const now=new Date().toLocaleTimeString();
+  const line=document.createElement('div');
+  line.className='log-line';
+  line.innerHTML=`<span class="ts">[${now}]</span> ${logs[idx][1]}`;
+  feed.appendChild(line);
+  if(feed.children.length>6) feed.removeChild(feed.children[1]);
+  feed.scrollTop=feed.scrollHeight;
+}
+
+setInterval(animateRequest,2500);
+setTimeout(animateRequest,500);
+
+// ===== ALGO TABS =====
+const algos={
+  rr:`<span class="cm"># Round Robin (DEFAULT) — requests go S1→S2→S3→S1 in order</span>
+<span class="kw">upstream</span> <span class="val">backend_servers</span> {
+    <span class="kw">server</span> <span class="val">127.0.0.1:8081</span>;   <span class="cm"># Server 1</span>
+    <span class="kw">server</span> <span class="val">127.0.0.1:8082</span>;   <span class="cm"># Server 2</span>
+    <span class="kw">server</span> <span class="val">127.0.0.1:8083</span>;   <span class="cm"># Server 3</span>
+}`,
+  lc:`<span class="cm"># Least Connections — sends to the least busy server</span>
+<span class="kw">upstream</span> <span class="val">backend_servers</span> {
+    <span class="val">least_conn</span>;
+    <span class="kw">server</span> <span class="val">127.0.0.1:8081</span>;
+    <span class="kw">server</span> <span class="val">127.0.0.1:8082</span>;
+    <span class="kw">server</span> <span class="val">127.0.0.1:8083</span>;
+}`,
+  ih:`<span class="cm"># IP Hash — same user always goes to same server (sticky sessions)</span>
+<span class="kw">upstream</span> <span class="val">backend_servers</span> {
+    <span class="val">ip_hash</span>;
+    <span class="kw">server</span> <span class="val">127.0.0.1:8081</span>;
+    <span class="kw">server</span> <span class="val">127.0.0.1:8082</span>;
+    <span class="kw">server</span> <span class="val">127.0.0.1:8083</span>;
+}`,
+  wt:`<span class="cm"># Weighted — Server 2 gets 3x more traffic than others</span>
+<span class="kw">upstream</span> <span class="val">backend_servers</span> {
+    <span class="kw">server</span> <span class="val">127.0.0.1:8081</span> <span class="val">weight=1</span>;
+    <span class="kw">server</span> <span class="val">127.0.0.1:8082</span> <span class="val">weight=3</span>;
+    <span class="kw">server</span> <span class="val">127.0.0.1:8083</span> <span class="val">weight=1</span>;
+}`
+};
+
+function showAlgo(key,el){
+  document.querySelectorAll('.algo-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('algoContent').innerHTML=algos[key];
+}
+
+// ===== SCROLL REVEAL =====
+const observer=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')});
+},{threshold:0.15});
+document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
+</script>
+</body>
+</html>
+
