@@ -99,16 +99,3 @@ sudo tail -f /var/log/nginx/access.log
 
 ## 👨‍💻 Author
 **SrikanthBerla** — Linux Load Balancer Project | RHEL | March 2026
-README
-
-echo "README created!"
-cat ~/nginx-loadbalancer-project/README.md
-```
-
-Then push to GitHub:
-```bash
-cd ~/nginx-loadbalancer-project
-git add README.md
-git commit -m "Add project README"
-git push
-```
